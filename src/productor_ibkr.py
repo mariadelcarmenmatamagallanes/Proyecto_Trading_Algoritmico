@@ -14,11 +14,12 @@ CLIENT_ID = 1
 SYMBOL = "EURUSD"
 
 # Configuracion de Kafka
-KAFKA_SERVER = "localhost:9092"
+KAFKA_SERVER = "127.0.0.1:9092"  # IPv4: en Windows "localhost" puede fallar
 KAFKA_TOPIC = "ticks"
 
 productor = Producer({
     "bootstrap.servers": KAFKA_SERVER,
+    "broker.address.family": "v4",
     "enable.idempotence": True
 })
 

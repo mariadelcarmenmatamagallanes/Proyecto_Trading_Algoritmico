@@ -20,7 +20,8 @@ from confluent_kafka import Consumer, Producer
 
 from estrategia_sma import EstrategiaSMA
 
-SERVIDOR = "localhost:9092"
+# 127.0.0.1 + IPv4: en Windows "localhost" puede intentar IPv6 y fallar con Docker
+SERVIDOR = "127.0.0.1:9092"
 
 
 def leer_argumentos():
@@ -50,13 +51,14 @@ def main():
 
     consumidor = Consumer({
         "bootstrap.servers": SERVIDOR,
+        "broker.address.family": "v4",
         # Un grupo por configuración: Kafka recuerda hasta dónde leyó cada versión
         "group.id": f"estrategia_{id_algoritmo.lower()}",
         # Primera vez: "earliest" usa velas guardadas para llenar las medias más rápido;
         # "latest" empieza solo con las velas nuevas
         "auto.offset.reset": "latest" if args.solo_nuevas else "earliest",
     })
-    productor = Producer({"bootstrap.servers": SERVIDOR})
+    productor = Producer({"bootstrap.servers": SERVIDOR, "broker.address.family": "v4"})
 
     consumidor.subscribe(["velas"])
     modo = "OFICIAL" if (args.corta, args.larga) == (10, 50) else "DEMOSTRACIÓN"

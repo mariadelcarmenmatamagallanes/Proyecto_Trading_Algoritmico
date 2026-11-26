@@ -7,6 +7,11 @@ from datetime import datetime, timezone
 from confluent_kafka import Consumer
 from ib_async import IB
 from seguridad_ibkr import verificar_conexion_paper
+from sincronizacion_ibkr import (
+    posicion_real_eurusd,
+    revisar_sincronizacion,
+    control_antes_de_operar,
+)
 from calculo_riesgo import calcular_riesgo
 from config_riesgo import (
     SIMBOLO_PERMITIDO,
@@ -17,6 +22,7 @@ from config_riesgo import (
     MAX_POSICIONES,
     VIGENCIA_SENAL_SEGUNDOS,
     TOLERANCIA_FUTURA_SEGUNDOS,
+    ORDENES_HABILITADAS,
 )
 
 # Conexion segura con IBKR Paper Trading
@@ -137,6 +143,14 @@ def procesar(s):
         if not riesgo["riesgo_autorizado"]:
             return "[RECHAZADA] Riesgo monetario excedido"
 
+    # Paso 18.9/18.10: controles contra el estado real de IBKR (solo lectura)
+    try:
+        rechazo_ibkr = control_antes_de_operar(ib, tipo, ORDENES_HABILITADAS)
+    except Exception as error:
+        return f"[RECHAZADA] No se pudo consultar IBKR: {error}"
+    if rechazo_ibkr:
+        return f"[RECHAZADA] {rechazo_ibkr}"
+
     # Guardar posición y señal en una misma transacción
     with db:
         duplicada = db.execute(
@@ -170,9 +184,20 @@ def procesar(s):
     return f"[DRY-RUN] {tipo} aceptada a {precio}"
 
 
+# Paso 18.9: comparar la posición lógica (SQLite) con la posición real en IBKR
+bloquear, mensaje_sync = revisar_sincronizacion(
+    posicion_abierta(), posicion_real_eurusd(ib), ORDENES_HABILITADAS
+)
+print(mensaje_sync)
+if bloquear:
+    db.close()
+    ib.disconnect()
+    raise SystemExit("[SEGURIDAD] Ejecutor detenido hasta corregir la diferencia")
+
 # Escuchar solo las señales de prueba
 consumidor = Consumer({
-    "bootstrap.servers": "localhost:9092",
+    "bootstrap.servers": "127.0.0.1:9092",
+    "broker.address.family": "v4",
     "group.id": "ejecutor_persistente_v1",
     "auto.offset.reset": "latest",
     "enable.auto.commit": False
