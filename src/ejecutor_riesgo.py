@@ -13,6 +13,7 @@ from sincronizacion_ibkr import (
     control_antes_de_operar,
 )
 from calculo_riesgo import calcular_riesgo
+from topicos import TOPICO_SIGNALS, modo_prueba, describir
 from config_riesgo import (
     SIMBOLO_PERMITIDO,
     CAPITAL_POR_OPERACION_USD,
@@ -41,7 +42,9 @@ print("[SEGURIDAD] Conexion Paper autorizada")
 # Base de datos local del proyecto
 ruta_bd = (
     Path(__file__).resolve().parent.parent
-    / "datos_prueba" / "ejecutor.sqlite3"
+    / "datos_prueba"
+    # En modo prueba se usa otra base para no contaminar el estado de la sesión real
+    / ("ejecutor_prueba.sqlite3" if modo_prueba() else "ejecutor.sqlite3")
 )
 
 ruta_bd.parent.mkdir(parents=True, exist_ok=True)
@@ -198,12 +201,13 @@ if bloquear:
 consumidor = Consumer({
     "bootstrap.servers": "127.0.0.1:9092",
     "broker.address.family": "v4",
-    "group.id": "ejecutor_persistente_v1",
+    "group.id": "ejecutor_persistente_v1" + ("_prueba" if modo_prueba() else ""),
     "auto.offset.reset": "latest",
     "enable.auto.commit": False
 })
 
-consumidor.subscribe(["signals"])
+consumidor.subscribe([TOPICO_SIGNALS])
+print(describir())
 
 print("Ejecutor persistente iniciado (DRY-RUN)")
 print("Posición guardada:", posicion_abierta())

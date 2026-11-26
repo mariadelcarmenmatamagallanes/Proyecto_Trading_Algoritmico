@@ -15,7 +15,9 @@ SYMBOL = "EURUSD"
 
 # Configuracion de Kafka
 KAFKA_SERVER = "127.0.0.1:9092"  # IPv4: en Windows "localhost" puede fallar
-KAFKA_TOPIC = "ticks"
+from topicos import TOPICO_TICKS
+
+KAFKA_TOPIC = TOPICO_TICKS
 
 productor = Producer({
     "bootstrap.servers": KAFKA_SERVER,

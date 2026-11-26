@@ -1,4 +1,6 @@
 
+import os
+
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import (
@@ -15,6 +17,12 @@ spark = (
 
 spark.sparkContext.setLogLevel("ERROR")
 
+# Tópicos configurables (docker run -e TOPICO_TICKS=... -e TOPICO_VELAS=...).
+# Sin variables: tópicos oficiales. Cada tópico de velas usa su propio checkpoint.
+TOPICO_TICKS = os.environ.get("TOPICO_TICKS", "ticks")
+TOPICO_VELAS = os.environ.get("TOPICO_VELAS", "velas")
+CHECKPOINT = f"/checkpoint/{TOPICO_VELAS}"
+
 esquema = StructType([
     StructField("symbol", StringType()),
     StructField("bid", DoubleType()),
@@ -27,7 +35,7 @@ datos = (
     spark.readStream
     .format("kafka")
     .option("kafka.bootstrap.servers", "localhost:9092")
-    .option("subscribe", "ticks")
+    .option("subscribe", TOPICO_TICKS)
     .option("startingOffsets", "latest")
     .load()
 )
@@ -95,13 +103,13 @@ consulta = (
     mensajes.writeStream
     .format("kafka")
     .option("kafka.bootstrap.servers", "localhost:9092")
-    .option("topic", "velas")
-    .option("checkpointLocation", "/checkpoint/velas")
+    .option("topic", TOPICO_VELAS)
+    .option("checkpointLocation", CHECKPOINT)
     .outputMode("append")
     .trigger(processingTime="5 seconds")
     .start()
 )
 
-print("Streaming iniciado: ticks -> velas", flush=True)
+print(f"Streaming iniciado: {TOPICO_TICKS} -> {TOPICO_VELAS} (checkpoint {CHECKPOINT})", flush=True)
 
 consulta.awaitTermination()

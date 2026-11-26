@@ -19,6 +19,7 @@ import json
 from confluent_kafka import Consumer, Producer
 
 from estrategia_sma import EstrategiaSMA
+from topicos import TOPICO_VELAS, TOPICO_SIGNALS, modo_prueba, describir
 
 # 127.0.0.1 + IPv4: en Windows "localhost" puede intentar IPv6 y fallar con Docker
 SERVIDOR = "127.0.0.1:9092"
@@ -53,17 +54,18 @@ def main():
         "bootstrap.servers": SERVIDOR,
         "broker.address.family": "v4",
         # Un grupo por configuración: Kafka recuerda hasta dónde leyó cada versión
-        "group.id": f"estrategia_{id_algoritmo.lower()}",
+        "group.id": f"estrategia_{id_algoritmo.lower()}" + ("_prueba" if modo_prueba() else ""),
         # Primera vez: "earliest" usa velas guardadas para llenar las medias más rápido;
         # "latest" empieza solo con las velas nuevas
         "auto.offset.reset": "latest" if args.solo_nuevas else "earliest",
     })
     productor = Producer({"bootstrap.servers": SERVIDOR, "broker.address.family": "v4"})
 
-    consumidor.subscribe(["velas"])
+    consumidor.subscribe([TOPICO_VELAS])
     modo = "OFICIAL" if (args.corta, args.larga) == (10, 50) else "DEMOSTRACIÓN"
     print(f"Estrategia {id_algoritmo} ({modo}) sobre {args.symbol}")
-    print("Esperando velas en el tópico 'velas'... (Ctrl + C para salir)")
+    print(describir())
+    print(f"Esperando velas en el tópico '{TOPICO_VELAS}'... (Ctrl + C para salir)")
 
     try:
         while True:
@@ -89,7 +91,7 @@ def main():
             print(texto, flush=True)
 
             if senal:
-                productor.produce("signals", value=json.dumps(senal))
+                productor.produce(TOPICO_SIGNALS, value=json.dumps(senal))
                 productor.flush(10)
                 print(f"  -> SEÑAL publicada: {senal}  motivo={estrategia.ultimo_motivo}", flush=True)
     except KeyboardInterrupt:
