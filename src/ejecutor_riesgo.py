@@ -1,6 +1,9 @@
 
+import argparse
 import json
 import math
+import os
+import re
 import sqlite3
 from pathlib import Path
 from datetime import datetime, timezone
@@ -23,14 +26,26 @@ from config_riesgo import (
     MAX_POSICIONES,
     VIGENCIA_SENAL_SEGUNDOS,
     TOLERANCIA_FUTURA_SEGUNDOS,
-    ORDENES_HABILITADAS,
 )
+
+TOPICO_PAPER = "signals_paper_prueba"
+revalidacion = re.fullmatch(r"signals_paper_revalidacion_([0-9a-f]{10})", TOPICO_SIGNALS)
+topico_paper_autorizado = TOPICO_SIGNALS == TOPICO_PAPER or revalidacion is not None
+modo_paper = False
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Ejecutor EURUSD para Dry Run y Paper.")
+    parser.add_argument("--paper", action="store_true", help="Activar órdenes en la cuenta Paper autorizada")
+    modo_paper = parser.parse_args().paper
+if modo_paper != topico_paper_autorizado:
+    raise SystemExit("[BLOQUEADO] El modo --paper requiere un tópico Paper autorizado")
+if revalidacion and os.environ.get("RECUPERAR_BUY_PAPER"):
+    raise SystemExit("[BLOQUEADO] Una revalidación nueva no recupera órdenes de otra corrida")
 
 # Conexion segura con IBKR Paper Trading
 ib = IB()
 try:
-    ib.connect("127.0.0.1", 7497, clientId=31,
-               timeout=10, readonly=True)
+    ib.connect("127.0.0.1", 7497, clientId=32 if modo_paper else 31,
+               timeout=10, readonly=not modo_paper)
     if not verificar_conexion_paper(ib):
         raise RuntimeError("Cuenta Paper no autorizada")
 except Exception:
@@ -40,11 +55,17 @@ except Exception:
 print("[SEGURIDAD] Conexion Paper autorizada")
 
 # Base de datos local del proyecto
+if revalidacion:
+    nombre_bd = f"ejecutor_paper_revalidacion_{revalidacion[1]}.sqlite3"
+elif modo_paper:
+    nombre_bd = "ejecutor_paper.sqlite3"
+else:
+    nombre_bd = "ejecutor_prueba.sqlite3" if modo_prueba() else "ejecutor.sqlite3"
 ruta_bd = (
     Path(__file__).resolve().parent.parent
     / "datos_prueba"
     # En modo prueba se usa otra base para no contaminar el estado de la sesión real
-    / ("ejecutor_prueba.sqlite3" if modo_prueba() else "ejecutor.sqlite3")
+    / nombre_bd
 )
 
 ruta_bd.parent.mkdir(parents=True, exist_ok=True)
@@ -99,6 +120,9 @@ def validar(s):
     if s["signal"] not in ("BUY", "SELL"):
         return "Señal inválida"
 
+    if isinstance(s["precio_referencia"], bool):
+        return "Precio inválido"
+
     try:
         precio = float(s["precio_referencia"])
         fecha = datetime.fromisoformat(
@@ -123,55 +147,72 @@ def validar(s):
 
     return None
 
-
 def procesar(s):
     error = validar(s)
     if error:
         return f"[RECHAZADA] {error}"
 
+    fecha = datetime.fromisoformat(
+        s["timestamp"].replace("Z", "+00:00")
+    ).astimezone(timezone.utc)
+
     clave = json.dumps([
         s["id_algoritmo"], s["symbol"],
-        s["signal"], s["timestamp"]
+        s["signal"], fecha.isoformat()
     ])
 
     tipo = s["signal"]
     precio = float(s["precio_referencia"])
 
+
+    cantidad_compra = None
     if tipo == "BUY":
         try:
             riesgo = calcular_riesgo(precio)
         except (ValueError, OverflowError):
             return "[RECHAZADA] No se pudo calcular el riesgo"
-
         if not riesgo["riesgo_autorizado"]:
             return "[RECHAZADA] Riesgo monetario excedido"
+        cantidad_compra = riesgo["cantidad_eur"]
 
-    # Paso 18.9/18.10: controles contra el estado real de IBKR (solo lectura)
-    try:
-        rechazo_ibkr = control_antes_de_operar(ib, tipo, ORDENES_HABILITADAS)
-    except Exception as error:
-        return f"[RECHAZADA] No se pudo consultar IBKR: {error}"
-    if rechazo_ibkr:
-        return f"[RECHAZADA] {rechazo_ibkr}"
+    if paper is None:
+        try:
+            rechazo_ibkr = control_antes_de_operar(ib, tipo, False)
+        except Exception as error:
+            return f"[RECHAZADA] No se pudo consultar IBKR: {error}"
+        if rechazo_ibkr:
+            return f"[RECHAZADA] {rechazo_ibkr}"
 
-    # Guardar posición y señal en una misma transacción
-    with db:
-        duplicada = db.execute(
-            "SELECT 1 FROM aceptadas WHERE clave = ?",
-            (clave,)
-        ).fetchone()
+    duplicada = db.execute("SELECT 1 FROM aceptadas WHERE clave = ?", (clave,)).fetchone()
+    if duplicada or (paper is not None and paper.ya_registrada(clave)):
+        return "[RECHAZADA] Señal duplicada"
 
-        if duplicada:
-            return "[RECHAZADA] Señal duplicada"
-
-        abierta = posicion_abierta()
-
-        if tipo == "BUY" and abierta:
-            return "[RECHAZADA] Ya existe una posición"
-
-        if tipo == "SELL" and not abierta:
+    abierta = posicion_abierta()
+    if tipo == "BUY" and abierta:
+        return "[RECHAZADA] Ya existe una posición"
+    if tipo == "SELL":
+        if not abierta:
             return "[RECHAZADA] No existe posición para vender"
+        compra = db.execute(
+            "SELECT clave FROM aceptadas WHERE tipo = 'BUY' ORDER BY rowid DESC LIMIT 1"
+        ).fetchone()
+        if compra is None:
+            return "[RECHAZADA] No se encontró el BUY de la posición abierta"
+        fecha_compra = datetime.fromisoformat(json.loads(compra[0])[3].replace("Z", "+00:00"))
+        if fecha < fecha_compra:
+            return "[RECHAZADA] Timestamp de SELL anterior al BUY de la posición abierta"
 
+    if paper is not None:
+        fecha_limite = fecha.timestamp() + VIGENCIA_SENAL_SEGUNDOS
+        ejecucion, referencia = paper.enviar(clave, tipo, precio, cantidad_compra, fecha_limite)
+        if ejecucion is None:
+            return f"[RECHAZADA] {referencia}"
+        cantidad, precio = ejecucion
+
+    # Confirmar conjuntamente la ejecución, la señal y el cambio de posición.
+    with db:
+        if paper is not None:
+            paper.guardar_ejecucion(clave, cantidad)
         db.execute(
             "INSERT INTO aceptadas VALUES (?, ?, ?)",
             (clave, tipo, precio)
@@ -184,35 +225,64 @@ def procesar(s):
             (nuevo_estado,)
         )
 
+    if paper is not None:
+        return f"[PAPER] {tipo} ejecutada a {precio} ({referencia})"
     return f"[DRY-RUN] {tipo} aceptada a {precio}"
 
 
-# Paso 18.9: comparar la posición lógica (SQLite) con la posición real en IBKR
-bloquear, mensaje_sync = revisar_sincronizacion(
-    posicion_abierta(), posicion_real_eurusd(ib), ORDENES_HABILITADAS
-)
-print(mensaje_sync)
-if bloquear:
+def comprobar_commit(particiones):
+    if not particiones:
+        raise RuntimeError("Kafka no devolvió el resultado de la confirmación")
+    for particion in particiones:
+        if particion.error is not None:
+            raise RuntimeError(f"Kafka no confirmó la partición {particion.partition}: {particion.error}")
+
+
+paper = None
+try:
+    if modo_paper:
+        from ordenes_paper import OrdenesPaper
+
+        ib.RequestTimeout = 10
+        ib.RaiseRequestErrors = True
+        paper = OrdenesPaper(ib, db, posicion_abierta())
+        print("[SINCRONIZADO] Cantidad Paper coincide entre SQLite e IBKR")
+    else:
+        _, mensaje_sync = revisar_sincronizacion(
+            posicion_abierta(), posicion_real_eurusd(ib), False
+        )
+        print(mensaje_sync)
+except Exception as error:
     db.close()
     ib.disconnect()
-    raise SystemExit("[SEGURIDAD] Ejecutor detenido hasta corregir la diferencia")
+    raise SystemExit(f"[BLOQUEADO] {error}") from error
 
-# Escuchar solo las señales de prueba
-consumidor = Consumer({
+if revalidacion:
+    grupo_kafka = f"ejecutor_paper_revalidacion_{revalidacion[1]}"
+elif modo_paper:
+    grupo_kafka = "ejecutor_paper_v1"
+else:
+    grupo_kafka = "ejecutor_persistente_v1" + ("_prueba" if modo_prueba() else "")
+config_kafka = {
     "bootstrap.servers": "127.0.0.1:9092",
     "broker.address.family": "v4",
-    "group.id": "ejecutor_persistente_v1" + ("_prueba" if modo_prueba() else ""),
+    "group.id": grupo_kafka,
     "auto.offset.reset": "latest",
-    "enable.auto.commit": False
-})
+    "enable.auto.commit": False,
+    "enable.auto.offset.store": False,
+}
+if modo_paper:
+    config_kafka["allow.auto.create.topics"] = False
+consumidor = Consumer(config_kafka)
 
 consumidor.subscribe([TOPICO_SIGNALS])
 print(describir())
 
-print("Ejecutor persistente iniciado (DRY-RUN)")
+print(f"Ejecutor persistente iniciado ({'PAPER' if modo_paper else 'DRY-RUN'})")
 print("Posición guardada:", posicion_abierta())
 print("Esperando señales... Ctrl + C para salir")
 
+particiones_iniciadas = set()
 try:
     while True:
         mensaje = consumidor.poll(1.0)
@@ -230,26 +300,32 @@ try:
             continue
 
         try:
-            senal = json.loads(mensaje.value())
-            resultado = procesar(senal)
+            particion = (mensaje.topic(), mensaje.partition())
+            if particion not in particiones_iniciadas:
+                from confluent_kafka import TopicPartition
+
+                # Guardar el offset que se debe leer al reiniciar, sin avanzar.
+                # Así latest no salta el primer mensaje de un grupo nuevo si SQLite falla.
+                reanudar = TopicPartition(*particion, mensaje.offset())
+                comprobar_commit(consumidor.commit(offsets=[reanudar], asynchronous=False))
+                particiones_iniciadas.add(particion)
+
+            try:
+                senal = json.loads(mensaje.value())
+            except (ValueError, TypeError):
+                resultado = "[RECHAZADA] JSON incorrecto"
+            else:
+                resultado = procesar(senal)
             print(resultado, flush=True)
 
-            # Confirmar la lectura después de guardar el estado
-            consumidor.commit(
-                message=mensaje,
-                asynchronous=False
-            )
-
-        except (ValueError, UnicodeDecodeError):
-            print("[RECHAZADA] JSON incorrecto")
-            consumidor.commit(
-                message=mensaje,
-                asynchronous=False
-            )
+            # Solo avanzar después de guardar el estado o rechazar el mensaje.
+            comprobar_commit(consumidor.commit(message=mensaje, asynchronous=False))
 
         except Exception as error:
-            print("Error de procesamiento:", error)
-            # No confirmar el mensaje si falla la base de datos
+            print(f"[BLOQUEADO] Error en partición {mensaje.partition()}, "
+                  f"offset {mensaje.offset()}: {error}", flush=True)
+            # Un commit posterior de la misma partición también saltaría este mensaje.
+            raise SystemExit(1) from error
 
 except KeyboardInterrupt:
     print("\nEjecutor detenido")

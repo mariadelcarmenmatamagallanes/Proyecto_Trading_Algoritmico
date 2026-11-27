@@ -1,7 +1,7 @@
 # Instalación paso a paso para nuevos integrantes (Windows 11)
 
-**Proyecto:** Trading Algorítmico · **Corte:** 26/11/2026 · **Nivel:** desde cero
-**Objetivo:** preparar una computadora Windows 11 para reproducir **lo que ya funciona**: Python → Kafka (`ticks`) → lectura con Spark. **Todavía no instala una plataforma de trading completa**; la validación integral de OHLC, señales y ejecutor sigue pendiente; la conexión IBKR se verificó por separado.
+**Proyecto:** Trading Algorítmico · **Corte:** 27/11/2026 · **Nivel:** desde cero
+**Objetivo:** preparar Windows 11 para reproducir el flujo de cotizaciones, velas y señales, el ejecutor Dry Run y la prueba controlada en TWS Paper.
 
 > **Si solo vas a seguir la sesión con pantalla compartida:** no necesitas instalar estas herramientas. Este documento es para quien vaya a ejecutar el proyecto en su propio equipo.  
 > **Si ya trabajas en la computadora de María:** salta a la [Sección B (continuar con la instalación existente)](#b-continuar-en-la-computadora-que-ya-funciona). No vuelvas a crear contenedores ni descargues imágenes sin necesidad.
@@ -312,10 +312,10 @@ Get-ChildItem .\src
 
 ## D. Qué NO se instala ni se configura todavía
 
-- **Interactive Brokers / TWS:** la cuenta paper fue creada, pero el acceso y la verificación aún estaban pendientes al cierre del 21/11/2026. No hay pasos comprobados de TWS/API para documentar como terminados.
+- **Interactive Brokers / TWS:** seguir la sección F para Dry Run y la sección H para pruebas controladas en Paper.
 - **Kafka en Docker Compose:** previsto para una arquitectura posterior; no se usó en las pruebas actuales.
-- **Spark como servicio permanente:** pendiente. El job OHLC está implementado y su inicio fue verificado; falta comprobar sus salidas.
-- **Algoritmo de trading, señales y órdenes:** pendientes. No se manejan fondos ni órdenes reales.
+- **Spark como servicio permanente:** pendiente. El job OHLC ya publica velas de prueba y de mercado.
+- **Algoritmo, señales y órdenes:** este proyecto opera exclusivamente en Paper. El guion de integración contiene los criterios de validación.
 
 ## E. Fuentes de instalación oficiales
 
@@ -419,15 +419,9 @@ incluye el módulo sqlite3.
 La base de datos y sus archivos auxiliares están excluidos
 del control de versiones.
 
-### F7. Restricciones y pendientes
+### F7. Modo Dry Run
 
-- Mantener la API en solo lectura.
-- El ejecutor no envía órdenes.
-- La seguridad de conexión fue verificada localmente.
-- La integración funcional con Kafka permanece pendiente.
-- Continuar en el paso 18.9 del mapa de trabajo.
-- No habilitar escritura hasta validar los controles pendientes.
-
+Mantén la API en solo lectura durante este modo. El ejecutor evalúa señales y registra una posición lógica en SQLite. El Bloque B aprobó el consumo de Kafka con este modo. Para una prueba de órdenes simuladas, usa la sección H.
 
 ## G. Instalación y reproducción en Git Bash (26/11/2026)
 
@@ -507,4 +501,12 @@ MSYS_NO_PATHCONV=1 docker run --rm --network container:kafka-trading --memory=17
 
 `pwd -W` obtiene la ruta Windows; `:ro` protege src; el segundo montaje conserva el checkpoint en el host. Esperar `Streaming iniciado: ticks -> velas`. En otra terminal activar el entorno y generar nuevos ticks. El job usa latest al iniciar sin checkpoint, ventanas de un minuto, MID y watermark de 10 segundos; necesita eventos posteriores que permitan cerrar la ventana. No borrar checkpoints ni mezclar datos ficticios y de mercado. Detener con Ctrl+C y conservar el estado.
 
-**Estado del corte:** inicio del job verificado; publicación y exactitud OHLC, recuperación del checkpoint y flujo integral pendientes. Mantener IBKR en Paper, solo lectura y Dry Run.
+**Estado al 27/11:** salida OHLC verificada en los tópicos de prueba y de mercado. La recuperación al reiniciar desde checkpoint sigue pendiente.
+
+
+## H. Preparación para una prueba en TWS Paper
+
+1. Abre **TWS Paper** en localhost:7497 con la cuenta autorizada en `.env`. Confirma el aviso de negociación simulada.
+2. Comprueba que Kafka, el entorno Python del proyecto y Docker funcionen. La corrida integral monta `.checkpoints` y crea tópicos y una base SQLite para su identificador.
+3. Para una prueba explícita de órdenes en Paper, desmarca **Read-Only API** en la configuración de TWS Paper. Las comprobaciones de datos y Dry Run se ejecutan con permiso de solo lectura. [Configuración de la API de TWS](https://interactivebrokers.github.io/tws-api/initial_setup.html)
+4. Antes de iniciar el ciclo, confirma que el saldo de efectivo EUR esté en cero y que TWS no muestre órdenes EURUSD abiertas. Consulta el [guion de integración](GUION_SESION_INTEGRACION.md#8-prueba-integral-con-órdenes-paper).

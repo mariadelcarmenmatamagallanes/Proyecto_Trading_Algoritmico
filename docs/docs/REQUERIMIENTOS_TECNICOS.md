@@ -1,7 +1,7 @@
 # Requerimientos técnicos y entorno de desarrollo
 
-**Fecha del corte:** 26/11/2026
-**Versión documental:** 1.3
+**Fecha del corte:** 27/11/2026
+**Versión documental:** 1.4
 **Entornos:** equipo inicial Windows 11 con aproximadamente 8 GB RAM para Kafka/Spark y equipo independiente Windows para pruebas IBKR.
 **Objetivo:** indicar qué se necesita, qué funciona hoy y cómo repetir las pruebas existentes.
 
@@ -11,12 +11,12 @@
 
 | Elemento | Papel en el proyecto | Estado |
 |---|---|---|
-| Interactive Brokers (IBKR) demo/paper | Fuente de precios y destino de órdenes **simuladas** | Cuenta Paper, acceso API y cotizaciones verificados |
+| Interactive Brokers (IBKR) demo/paper | Fuente de precios y destino de órdenes **simuladas** | Cotizaciones en tiempo real y ejecución controlada en Paper verificadas |
 | Mercado FOREX | Mercado en que debe operar el algoritmo | EURUSD seleccionado provisionalmente |
 | Apache Kafka | Recibe eventos en `ticks`, `velas` y `signals` | Funcionando |
-| Apache Spark Structured Streaming | Transforma ticks en velas de 1 minuto | Lectura verificada; transformación OHLC implementada, validación integral pendiente |
+| Apache Spark Structured Streaming | Transforma ticks en velas de 1 minuto | Velas OHLC publicadas con ticks controlados y de mercado |
 | Algoritmo de trading | Consume ticks o velas y publica BUY/SELL | SMA 10/50 implementada |
-| Ejecutor con gestión de riesgo | Revisa señales y envía órdenes a cuenta paper | Implementado en Dry Run; órdenes pendientes |
+| Ejecutor con gestión de riesgo | Revisa señales y envía órdenes a cuenta paper | Dry Run aprobado y ciclo de órdenes controladas en Paper aprobado |
 | Backtesting | Prueba con datos históricos | Implementado; deseable, no obligatorio |
 
 **No obligatorio en el enunciado:** Windows 11, Python, Docker, VS Code, Git, GitHub, `confluent-kafka`. Estas son decisiones de implementación del equipo.
@@ -137,7 +137,7 @@ docker run --rm --network container:kafka-trading --memory=1792m --cpus=2 -e HOM
 - `--packages ...`: incorpora el conector de Spark con Kafka.
 - `-e HOME=/tmp` y `spark.jars.ivy=/tmp/spark-ivy`: solucionan el error observado cuando Ivy intentó escribir en `/nonexistent/.ivy2.5.2/cache`.
 
-**Resultado comprobado:** Spark mostró **11 mensajes JSON** del tópico `ticks` en consola. El script leer_ticks_spark.py solo realiza lectura. Posteriormente se incorporó la transformación OHLC en publicar_velas_spark.py, cuya validación integral permanece pendiente.
+**Resultado comprobado:** Spark mostró **11 mensajes JSON** del tópico `ticks` en consola. El script leer_ticks_spark.py solo realiza lectura. El 27/11 se comprobó que `publicar_velas_spark.py` publica velas OHLC y que SMA 3/5 consume las velas de IBKR.
 
 **Limitación de reproducibilidad:** como se usa `--rm`, el contenedor de Spark se elimina al terminar. La primera descarga de dependencias puede repetirse. Más adelante se propondrá un volumen persistente y una red Docker propia/Compose, probados con los recursos de esta computadora.
 
@@ -150,11 +150,11 @@ docker run --rm --network container:kafka-trading --memory=1792m --cpus=2 -e HOM
 | Biblioteca Python | ib_async==2.1.0 |
 | Host | 127.0.0.1 |
 | Puerto API | 7497 |
-| Permisos API | Solo lectura |
+| Permisos API | Solo lectura para cotizaciones y Dry Run. Escritura únicamente para pruebas explícitas en TWS Paper. |
 | Conexiones permitidas | Localhost |
-| Client ID del ejecutor | 31 |
+| Client ID del ejecutor | 31 en Dry Run, 32 en Paper |
 | Cuenta autorizada | Configuración local mediante .env |
-| Modalidad del ejecutor | Dry Run |
+| Modalidad del ejecutor | Dry Run por defecto. Paper mediante `--paper` y un tópico Paper autorizado. |
 
 La conexión API y la recepción de cotizaciones EURUSD
 fueron verificadas el 24/11/2026.
@@ -163,7 +163,7 @@ El 26/11/2026 se comprobó el inicio autorizado del ejecutor,
 el bloqueo automático ante el cierre de TWS y el rechazo
 de inicio cuando TWS no está disponible.
 
-La configuración debe mantenerse en solo lectura.
+El 27/11 TWS confirmó EURUSD en tiempo real mediante el tipo de dato 1. Los permisos de mercado pueden variar entre cuentas.
 
 Documentación oficial proporcionada por el profesor:
 https://interactivebrokers.github.io/tws-api/
@@ -181,7 +181,9 @@ Consultar también:
 | src/config_riesgo.py | Parámetros de riesgo |
 | src/calculo_riesgo.py | Dimensionamiento y riesgo monetario |
 | src/seguridad_ibkr.py | Validación de conexión y cuenta autorizada |
-| datos_prueba/ejecutor.sqlite3 | Persistencia del estado lógico |
+| src/ordenes_paper.py | Envío Paper, verificación de ejecuciones, consulta del efectivo EUR y conciliación |
+| src/validar_senales.py | Validación del Bloque B en `signals_prueba` |
+| bases SQLite en `datos_prueba/` | Persistencia por modo y corrida |
 
 ### 8.2. Parámetros de simulación
 
@@ -195,9 +197,9 @@ Consultar también:
 | Posiciones lógicas simultáneas | 1 |
 | Vigencia máxima de señal | 120 segundos |
 | Tolerancia temporal futura | 30 segundos |
-| Tópico Kafka | signals |
+| Tópicos Kafka | Dry Run en `signals` o `signals_prueba`. Paper en `signals_paper_prueba` o `signals_paper_revalidacion_<id>`. |
 | Servidor Kafka | localhost:9092 |
-| Grupo consumidor | ejecutor_persistente_v1 |
+| Grupos consumidores | Dry Run en `ejecutor_persistente_v1` o su variante de prueba. Paper en `ejecutor_paper_v1` o `ejecutor_paper_revalidacion_<id>`. |
 
 Los parámetros corresponden a decisiones de implementación
 para simulación y no constituyen garantías de pérdida máxima.
@@ -208,11 +210,7 @@ Se utiliza sqlite3, incluido en la biblioteca estándar de Python.
 No requiere instalar un servidor de bases de datos ni una
 dependencia adicional mediante pip.
 
-La base de datos conserva las señales aceptadas y el estado
-lógico de la posición entre ejecuciones.
-
-La posición lógica no equivale necesariamente a una posición
-confirmada por Interactive Brokers.
+En Dry Run, SQLite conserva señales aceptadas y la posición lógica. Paper usa una base separada y registra la intención de envío, la referencia de TWS y el resultado. El ejecutor actualiza la posición en una transacción después del llenado completo y la conciliación del saldo EUR. Un resultado incierto queda pendiente y bloquea el reenvío.
 
 ### 8.4. Configuración privada
 
@@ -222,8 +220,7 @@ con la variable IBKR_PAPER_ACCOUNT.
 Cada integrante deberá configurar su propia cuenta Paper
 autorizada, sin compartir identificadores privados.
 
-El archivo .env y la base de datos local deben permanecer
-excluidos del repositorio mediante .gitignore.
+Mantener `.env` y las bases SQLite fuera de los archivos a publicar. Comprobar las exclusiones de Git antes de preparar una entrega.
 
 No se requiere python-dotenv: la configuración se lee
 mediante pathlib, incluido en Python.
@@ -231,43 +228,25 @@ mediante pathlib, incluido en Python.
 ### 8.5. Restricciones de seguridad
 
 - No utilizar cuentas reales.
-- No habilitar permisos de escritura durante las pruebas actuales.
+- Habilitar permisos de escritura únicamente durante una prueba explícita en la cuenta Paper autorizada.
 - No enviar órdenes mientras el ejecutor permanezca en Dry Run.
 - Validar la cuenta autorizada antes de procesar señales.
 - Bloquear el procesamiento ante pérdida de conexión detectada.
 - No publicar credenciales, identificadores de cuenta ni archivos privados.
 - No interpretar el puerto o prefijo de cuenta como prueba suficiente de Paper Trading.
 
-## 9. Pendientes técnicos antes de integrar todo
+## 9. Pendientes técnicos
 
-1. Validar la configuración definitiva de red Kafka/Spark.
-2. Validar recuperación del checkpoint ya montado y resolver persistencia de dependencias de Spark.
-3. Validar ventanas OHLC, eventos tardíos y duplicados.
-4. Verificar publicación y consumo integrado de ticks, velas y signals.
-5. Sincronizar estrategia, posición lógica y posiciones reales del entorno Paper.
-6. Validar cantidades, órdenes existentes y controles de riesgo restantes.
-7. Comprobar recuperación ante fallos de SQLite y offsets Kafka.
-8. Comprobar cierre de recursos ante excepciones.
-9. Ejecutar pruebas integradas del ejecutor Dry Run.
-10. Registrar versiones exactas de dependencias y evidencias.
-11. Validar restricciones de tamaño de operación del broker.
-12. Realizar pruebas de órdenes exclusivamente Paper después de aprobar los controles.
+1. Reproducir el reinicio de Spark desde su checkpoint y probar interrupciones de Kafka y TWS.
+2. Repetir la instalación y las pruebas con otro integrante y su propia cuenta Paper.
 
-## 10. Limitaciones del corte actual
+## 10. Alcance verificado
 
-Las pruebas de seguridad del ejecutor fueron realizadas
-en un equipo con TWS disponible, pero sin conexión
-a Kafka en localhost:9092.
+El Bloque B aprobó el envío de ambas señales controladas por Kafka y su aceptación en Dry Run. El ciclo Paper de 914 EUR aprobó el envío, la ejecución completa y la conciliación automática con TWS. El aviso por tamaño inferior al mínimo de IDEALPRO apareció durante la prueba y ambas órdenes se ejecutaron. La corrida integral posterior verificó el mismo cierre con señales SMA originadas por cotizaciones de IBKR.
 
-No se ha comprobado el procesamiento integrado de señales
-en este entorno ni se han enviado órdenes a IBKR.
+Para EURUSD en Paper, la consulta de posiciones por contrato puede devolver cero mientras existe efectivo en EUR. El ejecutor consulta el saldo de divisas de la cuenta. Tras un llenado completo, espera de forma acotada la actualización del saldo y la desaparición de su propia orden de la lista de abiertas. Una orden ajena o un saldo inesperado bloquean el procesamiento.
 
-El siguiente integrante deberá continuar en el paso 18.9
-del mapa de trabajo, manteniendo la API en solo lectura.
-
-Consultar:
-[Mapa de trabajo](MAPA_DE_TRABAJO.md).
-
+Consulta la [bitácora de validación](BITACORA_VALIDACION_2026-11-27.md) y el [mapa de trabajo](MAPA_DE_TRABAJO.md).
 
 ## 11. Segundo entorno verificado — 26/11/2026
 

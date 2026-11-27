@@ -1,15 +1,17 @@
 # Guion de la sesión de integración de extremo a extremo
 
-**Objetivo:** demostrar por primera vez el flujo completo en **una sola computadora**:
+**Objetivo**
+
+Reproducir la verificación en Dry Run de las secciones 0 a 7 y, en la sección 8, el ciclo de integración con la cuenta Paper autorizada.
 
 ```
 IBKR Paper → productor → Kafka `ticks` → Spark → Kafka `velas` → estrategia → Kafka `signals` → ejecutor (Dry Run)
 ```
 
-**Duración estimada:** 60–90 minutos (20 de preparación, 30–45 de flujo en vivo, 15 de pruebas de error).
+**Duración estimada del guion Dry Run:** 60–90 minutos. Para la corrida Paper, contar el arranque de Spark y hasta 25 minutos por defecto para recibir señales de mercado.
 **Responsable del guion:** Laura M. Sánchez Martínez.
 
-> ⚠️ **Horario:** el mercado FOREX cierra el **viernes a las 16:00 (hora del centro de México)** y abre el domingo a las 16:00. Sin mercado abierto **no llegan cotizaciones** y no hay demostración. La sesión debe hacerse **antes del viernes a las 15:00**.
+Realiza la corrida de mercado cuando TWS esté recibiendo cotizaciones EURUSD en tiempo real. La estrategia necesita cinco velas de un minuto para empezar a producir señales.
 
 ---
 
@@ -187,4 +189,24 @@ mkdir -p .checkpoints/velas
 MSYS_NO_PATHCONV=1 docker run --rm --network container:kafka-trading --memory=1792m --cpus=2 -e HOME=/tmp -v "$(pwd -W)/src:/app:ro" -v "$(pwd -W)/.checkpoints:/checkpoint" --entrypoint /opt/spark/bin/spark-submit apache/spark:4.2.1-scala2.13-java17-python3-ubuntu --master "local[1]" --driver-memory 768m --conf spark.ui.enabled=false --conf spark.jars.ivy=/tmp/spark-ivy --packages org.apache.spark:spark-sql-kafka-0-10_2.13:4.2.1 /app/publicar_velas_spark.py
 ```
 
-En Git Bash anteponer MSYS_NO_PATHCONV=1 a los comandos docker exec con rutas Linux. Activar el entorno existente con source venv/Scripts/activate (o .venv según el equipo). El inicio de Spark fue comprobado; aún no se verificó la publicación OHLC. Antes de la sesión integral, validar paso 15 con datos ficticios, recuperación del checkpoint, aislamiento de datos de mercado y conectividad IPv4 de cada cliente. El productor ficticio ya fue corregido y validado; no asumir que los otros clientes lo están. Conservar API Paper en solo lectura y ejecutor Dry Run. Los tiempos del guion son estimaciones, no resultados observados.
+
+En Git Bash usa `MSYS_NO_PATHCONV=1` para los comandos Docker con rutas Linux y activa `venv` (o `.venv`, según el equipo). La salida OHLC se verificó el 27/11. El reinicio desde checkpoint figura entre las pruebas de resistencia pendientes.
+
+## 8. Prueba integral con órdenes Paper
+
+La corrida usa cotizaciones tipo 1 de TWS, un tópico Kafka de ticks, Spark, un tópico de velas y la estrategia SMA 3/5. Cada corrida crea sus propios tópicos, grupo del ejecutor y base SQLite. La estrategia aporta el lado, el identificador, el timestamp UTC y el cierre de la vela. El lote de prueba usa el bid o ask vigente para calcular el precio límite y conserva el cierre original en `cierre_sma`.
+
+1. Confirma en TWS Paper el saldo de 0 EUR y que no haya órdenes EURUSD abiertas. Para la prueba explícita de órdenes, habilita la escritura de la API de esa sesión simulada.
+2. Desde la raíz del proyecto y con `venv` activo, ejecuta el archivo entregado `probar_flujo_integral_paper.py`. Conserva `revalidar_ciclo_paper.py` en la misma carpeta que ese archivo.
+
+   ```bash
+   python -B "/ruta/entregada/probar_flujo_integral_paper.py"
+   ```
+
+3. Espera las velas y el BUY y SELL de la estrategia. La sonda inicial puede producir `[RECHAZADA] Faltan campos obligatorios`. Es un mensaje de control sin orden.
+4. Guarda el identificador de corrida, ambas ejecuciones y la línea `RESULTADO: APROBADO`. El criterio de cierre es que TWS muestre 0 EUR y SQLite registre la posición cerrada con exactamente un BUY y un SELL ejecutados.
+5. Si aparece `INCOMPLETO`, revisa el saldo y las ejecuciones de TWS antes de repetir. Una orden ejecutada puede quedar pendiente en SQLite si la respuesta de TWS llegó tarde. La conciliación usa su referencia y el llenado comprobado.
+
+La prueba espera hasta 25 minutos por defecto. Si el mercado solo genera BUY, la ejecución puede terminar con esa posición Paper abierta. El resultado se registra como incompleto hasta resolver el saldo.
+
+Consulta los resultados registrados en la [bitácora de validación](BITACORA_VALIDACION_2026-11-27.md).

@@ -4,9 +4,9 @@
 **Proyecto:** Trading Algorítmico  
 **Programa académico:** Licenciatura en Inteligencia Artificial y Ciencia de Datos  
 **Fecha de implementación:** 24 de noviembre de 2026  
-**Última actualización:** 26 de noviembre de 2026
-**Versión del documento:** 1.1
-**Estado:** Conexión API, recepción de cotizaciones y controles locales de seguridad del ejecutor Dry Run verificados. Integración completa pendiente.
+**Última actualización:** 27 de noviembre de 2026
+**Versión del documento:** 1.2
+**Estado:** Cotizaciones EURUSD en tiempo real, integración con Kafka y Spark y ciclo controlado Paper verificados. Corrida de mercado a ejecución aprobada en TWS Paper.
 
 ---
 
@@ -616,6 +616,8 @@ Sin embargo, no se realizó una medición independiente de latencia ni una audit
 
 Por tanto, no debe afirmarse que todos los integrantes recibirán necesariamente datos en tiempo real.
 
+El 27 de noviembre se verificó directamente la notificación de tipo 1 de TWS para EURUSD en la cuenta Paper de prueba. La confirmación identifica la modalidad del dato en esa sesión. [Tipos de datos de mercado de IBKR](https://interactivebrokers.github.io/tws-api/market_data_type.html)
+
 ---
 
 ## 12. Recepción continua de cotizaciones
@@ -851,7 +853,7 @@ Puede utilizarse para ejecutar Kafka y Spark sin instalarlos directamente como a
 
 Sin embargo, Kafka y Spark también pueden ejecutarse mediante otras configuraciones.
 
-### 15.5. Limitación actual
+### 15.5. Alcance de las pruebas iniciales
 
 La computadora utilizada para conectar la API no contaba con Docker instalado.
 
@@ -859,7 +861,7 @@ No se comprobó la disponibilidad de un servicio Kafka local en dicha computador
 
 Por tanto, no se ejecutó el nuevo productor integrado.
 
-La conexión API quedó comprobada independientemente de la infraestructura Kafka y Spark.
+El 27 de noviembre se validó el productor con Kafka en el entorno integrado y se observaron velas y señales de mercado.
 
 ---
 
@@ -941,11 +943,13 @@ El acceso a la API no garantiza automáticamente permisos gratuitos para todos l
 | Actualización de requirements.txt | Realizada |
 | Creación de productor_ibkr.py | Realizada |
 | Validación de sintaxis | Aprobada |
-| Ejecución completa del productor IBKR | Pendiente |
-| Publicación de cotizaciones en Kafka | Pendiente |
-| Construcción de velas con datos de IBKR | Pendiente |
-| Integración IBKR con estrategia SMA | Pendiente |
-| Ejecución de órdenes simuladas | No realizada |
+| Ejecución del productor IBKR | Verificada |
+| Publicación de cotizaciones en Kafka | Verificada en `ticks_ibkr_prueba` |
+| Construcción de velas con datos de IBKR | Verificada en `velas_ibkr_prueba` |
+| Integración IBKR con estrategia SMA | SMA 3/5 publicó BUY y SELL con velas de mercado |
+| Ejecución de órdenes simuladas | BUY y SELL controlados verificados en TWS Paper |
+| Ciclo automático con señales controladas | Aprobado, 0 EUR en TWS y posición cerrada en SQLite |
+| Ciclo con señales originadas por la estrategia y ejecutadas en Paper | Aprobado, 0 EUR en TWS y posición cerrada en SQLite |
 | Medición independiente de latencia | Pendiente |
 | Reproducción en otras computadoras | Pendiente |
 
@@ -953,19 +957,9 @@ El acceso a la API no garantiza automáticamente permisos gratuitos para todos l
 
 ## 19. Conclusión
 
-El 24 de noviembre de 2026 se consiguió establecer una conexión local entre Python y Trader Workstation mediante la API de Interactive Brokers.
+La prueba del 27 de noviembre conectó las cotizaciones en tiempo real de IBKR con Kafka, las velas OHLC de Spark y el cálculo SMA 3/5. La estrategia publicó BUY y SELL en un tópico aislado. En una prueba separada, el ejecutor completó y concilió un BUY y un SELL en TWS Paper de forma automática.
 
-La conexión se realizó utilizando una cuenta Paper Trading, el puerto 7497 y la biblioteca ib_async versión 2.1.0.
-
-Se comprobaron tanto la conectividad TCP como la comunicación mediante el protocolo de la API.
-
-Posteriormente, se recibieron cotizaciones de EUR/USD y se verificó su actualización durante una prueba continua de 30 segundos.
-
-Se desarrolló un productor independiente para preparar la publicación de cotizaciones en Apache Kafka y se comprobó que su código no presenta errores de sintaxis.
-
-La integración completa con Kafka y Spark permanece pendiente de validación funcional.
-
-La conexión de la API constituye un avance comprobado e independiente dentro del proyecto.
+La corrida `50c598d3dc` confirmó ambas ejecuciones a partir de señales de mercado de SMA 3/5. TWS quedó con 0 EUR y SQLite con la posición cerrada. Consulta la [bitácora de validación](docs/BITACORA_VALIDACION_2026-11-27.md).
 
 ---
 
@@ -1022,6 +1016,7 @@ https://spark.apache.org/docs/latest/streaming/index.html
 | 1.0 | 2026-11-24 | Documentación inicial de instalación, configuración, conexión API, recepción de cotizaciones y desarrollo preliminar del productor IBKR. |
 
 | 1.1 | 2026-11-26 | Integracion de controles de seguridad, autorizacion de cuenta Paper y pruebas del ejecutor Dry Run. |
+| 1.2 | 2026-11-27 | Datos EURUSD en tiempo real, Kafka, Spark, SMA de mercado y ciclo de órdenes controladas Paper. |
 
 ---
 
@@ -1066,12 +1061,17 @@ estas pruebas.
 La detección de desconexión no garantiza identificar
 inmediatamente todas las interrupciones silenciosas de red.
 
-El ejecutor permanece en Dry Run y la API en solo lectura.
+En el corte del 26/11 el ejecutor estaba en Dry Run y la API en solo lectura.
 
-### 22.5. Punto de continuación
 
-Continuar en el paso 18.9 del mapa de trabajo:
-consulta y sincronización de posiciones y órdenes de IBKR.
+### 22.5. Continuación del corte histórico
 
-No habilitar permisos de escritura hasta completar
-y validar los controles de riesgo pendientes.
+Las actividades de sincronización y validación Dry Run de este corte se completaron el 27/11. El estado vigente figura en la sección siguiente.
+
+## 23. Ejecución y conciliación en Paper
+
+El ejecutor mantiene Dry Run como modo predeterminado. La ejecución Paper requiere `--paper`, un tópico Paper autorizado, la cuenta local configurada en `.env` y permiso de órdenes en la sesión simulada de TWS. Cuando TWS tiene activa la opción **Read-Only API**, la previsualización puede devolver el error 321. [Configuración de la API de TWS](https://interactivebrokers.github.io/tws-api/initial_setup.html)
+
+El ejecutor guarda la intención antes de enviar cada orden límite IOC. Después confirma el llenado completo y consulta el saldo de efectivo EUR. En la prueba, una consulta de posición por contrato devolvió 0 aunque TWS ya había comprado EUR. El saldo de divisas y la ejecución por referencia permitieron conciliarlo. El ajuste final espera de forma acotada que TWS actualice su lista de órdenes y el efectivo. [Saldos por divisa en TWS](https://www.interactivebrokers.com/support/faq/content/see-actual-cash-balances-tws-118722609)
+
+En el ciclo controlado automático se compraron 914 EUR a 1.09380 y se vendieron 914 EUR a 1.09350. El resultado final fue 0 EUR en TWS y posición cerrada en SQLite. El aviso de lote pequeño fue informativo en esa corrida. [Lotes pequeños en IBKR](https://www.interactivebrokers.com/support/faq/content/odd-lot-fx-transactions-1163260635)

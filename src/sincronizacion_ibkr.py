@@ -48,6 +48,9 @@ def revisar_sincronizacion(en_posicion_logica, posicion_real, ordenes_habilitada
     - Dry Run (ordenes_habilitadas=False): nunca bloquea; solo informa.
     - Órdenes Paper (True): bloquea si la posición lógica y la real no coinciden.
     """
+    if ordenes_habilitadas and posicion_real < 0:
+        return True, "[BLOQUEADO] Posición negativa no autorizada en IBKR"
+
     hay_posicion_real = abs(posicion_real) > 0
     resumen = (f"posición lógica (SQLite) = {'ABIERTA' if en_posicion_logica else 'CERRADA'}, "
                f"posición IBKR = {posicion_real:g} EUR")
@@ -80,7 +83,7 @@ def control_antes_de_operar(ib, tipo, ordenes_habilitadas, cuenta=None):
         return None
 
     real = posicion_real_eurusd(ib, cuenta)
-    if tipo == "BUY" and real > 0:
+    if tipo == "BUY" and real != 0:
         return "IBKR ya tiene una posición EURUSD abierta"
     if tipo == "SELL" and real <= 0:
         return "IBKR no tiene posición EURUSD para cerrar"

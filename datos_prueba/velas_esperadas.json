@@ -1,0 +1,95 @@
+{
+  "topico_ticks": "ticks_prueba",
+  "velas": [
+    {
+      "symbol": "EURUSD",
+      "inicio": "2026-11-27T16:20:00Z",
+      "open": 1.08503,
+      "high": 1.08533,
+      "low": 1.08503,
+      "close": 1.08533,
+      "num_ticks": 6
+    },
+    {
+      "symbol": "EURUSD",
+      "inicio": "2026-11-27T16:21:00Z",
+      "open": 1.08536,
+      "high": 1.08566,
+      "low": 1.08536,
+      "close": 1.08566,
+      "num_ticks": 6
+    },
+    {
+      "symbol": "EURUSD",
+      "inicio": "2026-11-27T16:22:00Z",
+      "open": 1.08569,
+      "high": 1.08599,
+      "low": 1.08569,
+      "close": 1.08599,
+      "num_ticks": 6
+    },
+    {
+      "symbol": "EURUSD",
+      "inicio": "2026-11-27T16:23:00Z",
+      "open": 1.08602,
+      "high": 1.08632,
+      "low": 1.08602,
+      "close": 1.08632,
+      "num_ticks": 6
+    },
+    {
+      "symbol": "EURUSD",
+      "inicio": "2026-11-27T16:24:00Z",
+      "open": 1.08635,
+      "high": 1.08665,
+      "low": 1.08635,
+      "close": 1.08665,
+      "num_ticks": 6
+    },
+    {
+      "symbol": "EURUSD",
+      "inicio": "2026-11-27T16:25:00Z",
+      "open": 1.08668,
+      "high": 1.08698,
+      "low": 1.08668,
+      "close": 1.08698,
+      "num_ticks": 6
+    },
+    {
+      "symbol": "EURUSD",
+      "inicio": "2026-11-27T16:26:00Z",
+      "open": 1.08688,
+      "high": 1.08688,
+      "low": 1.08653,
+      "close": 1.08653,
+      "num_ticks": 6
+    },
+    {
+      "symbol": "EURUSD",
+      "inicio": "2026-11-27T16:27:00Z",
+      "open": 1.08643,
+      "high": 1.08643,
+      "low": 1.08608,
+      "close": 1.08608,
+      "num_ticks": 6
+    },
+    {
+      "symbol": "EURUSD",
+      "inicio": "2026-11-27T16:28:00Z",
+      "open": 1.08598,
+      "high": 1.08598,
+      "low": 1.08563,
+      "close": 1.08563,
+      "num_ticks": 6
+    },
+    {
+      "symbol": "EURUSD",
+      "inicio": "2026-11-27T16:29:00Z",
+      "open": 1.08553,
+      "high": 1.08553,
+      "low": 1.08518,
+      "close": 1.08518,
+      "num_ticks": 6
+    }
+  ]
+}

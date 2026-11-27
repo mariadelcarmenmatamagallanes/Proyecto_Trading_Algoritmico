@@ -4,9 +4,9 @@
 **Proyecto:** Trading Algorítmico
 **Programa:** Licenciatura en Inteligencia Artificial y Ciencia de Datos
 **Equipo:** 6 estudiantes
-**Corte:** 26/11/2026
-**Versión documental:** 1.3
-**Fase actual:** Desarrollo e integración de componentes.
+**Corte:** 27/11/2026
+**Versión documental:** 1.4
+**Fase actual:** Flujo de extremo a extremo aprobado en TWS Paper. Resistencia a fallos por validar.
 
 ## 1. Objetivo del mapa de trabajo
 
@@ -202,6 +202,10 @@ El procedimiento completo se encuentra en:
 
 No se comprobó la salida OHLC ni el consumo integrado de señales. La prueba del ejecutor anterior conserva su alcance original. No se enviaron órdenes.
 
+### 3.7. Validación del 27 de noviembre de 2026
+
+El Bloque B aprobó la secuencia BUY → SELL de señales controladas. TWS confirmó datos EURUSD en tiempo real y la estrategia SMA 3/5 publicó señales a partir de velas de mercado. El ejecutor completó un ciclo Paper automático con señales controladas. La [bitácora de validación](BITACORA_VALIDACION_2026-11-27.md) detalla ejecuciones, incidencias y criterios pendientes.
+
 ## 4. Estado consolidado de actividades
 
 Se conserva la numeración original del mapa de trabajo.
@@ -209,12 +213,12 @@ Se conserva la numeración original del mapa de trabajo.
 | Paso | Actividad | Estado |
 |---|---|---|
 | 1-13 | Infraestructura y lectura inicial de Kafka con Spark | Reproducido en segundo entorno el 26/11/2026 |
-| 15 | Generación de velas OHLC | Implementado; validación integral pendiente |
-| 16 | Generación de datos de prueba | Generadores implementados; validación pendiente |
-| 17 | Estrategia SMA 10/50 | Implementada; conexión por tópicos principales |
-| 18 | Ejecutor y gestión de riesgos | Parcialmente completado; continuar en 18.9 |
-| 19 | Integración con Interactive Brokers | Parcialmente completado |
-| 20 | Pruebas integradas y resistencia a fallos | Pruebas parciales realizadas |
+| 15 | Generación de velas OHLC | Publicación verificada con ticks controlados y de mercado |
+| 16 | Generación de datos de prueba | Generador de ticks usado en el Bloque B aprobado |
+| 17 | Estrategia SMA 10/50 | Implementada. SMA 3/5 verificada como modo demostración con velas de IBKR. |
+| 18 | Ejecutor y gestión de riesgos | Controles verificados en pruebas aisladas y en el Bloque B Dry Run |
+| 19 | Integración con Interactive Brokers | Cotizaciones en tiempo real, Kafka y ciclo controlado Paper verificados |
+| 20 | Pruebas integradas y resistencia a fallos | Corrida integral aprobada. Recuperación por verificar. |
 | 21 | Backtesting | Implementado y documentado |
 | 22 | Documentación y exposición | En progreso |
 
@@ -230,7 +234,7 @@ No se modifica dicha numeración para mantener la trazabilidad histórica.
 
 **Carácter:** Obligatorio.
 
-**Estado:** Implementado; inicio del streaming verificado; publicación y exactitud OHLC pendientes.
+**Estado:** Generación y publicación OHLC verificadas con datos controlados y de IBKR. Queda pendiente la prueba de recuperación desde checkpoint.
 
 **Qué debemos hacer:**
 
@@ -277,7 +281,7 @@ El consumidor de velas recibe objetos JSON con los campos definidos por el profe
 
 **Carácter:** Actividad de soporte.
 
-**Estado:** Generadores implementados; validación pendiente.
+**Estado:** Generadores implementados. El generador de ticks controlados se usó en el Bloque B aprobado.
 
 **Qué se hizo:**
 
@@ -317,7 +321,7 @@ La disponibilidad de velas sintéticas no demuestra que Spark pueda construirlas
 
 **Carácter:** Obligatorio.
 
-**Estado:** Implementada y probada de forma aislada según la documentación de Laura. Conexión por tópicos principales implementada; validación integral pendiente.
+**Estado:** Implementada y probada de forma aislada. La variante de demostración SMA 3/5 recibió velas de IBKR y publicó BUY y SELL.
 
 **Responsable del desarrollo documentado:** Laura M. Sánchez Martínez.
 
@@ -441,14 +445,15 @@ El Stop Loss del 2 % establecido en el pseudocódigo representa una variación d
 | 18.6 | Consolidación del ejecutor principal | Completado |
 | 18.7 | Configuración y cálculo del riesgo monetario | Completado dentro del alcance local |
 | 18.8 | Seguridad de conexión IBKR Paper | Validada dentro del alcance local |
-| 18.9 | Consulta y sincronización de posiciones y órdenes IBKR | Pendiente |
-| 18.10 | Controles de riesgo restantes | Pendiente |
-| 18.11 | Validación integral del ejecutor Dry Run | Pendiente |
+| 18.9 | Consulta y sincronización de posiciones y órdenes IBKR | Verificada con órdenes abiertas y saldo de efectivo EUR en Paper |
+| 18.10 | Controles de riesgo restantes | Verificados en pruebas aisladas, incluido rechazo de precios booleanos y SELL anterior al BUY |
+| 18.11 | Validación integral del ejecutor Dry Run | Aprobada en el Bloque B con `signals_prueba` |
 | 18.12 | Documentación y cierre del ejecutor | En progreso |
 
 #### Archivos principales
 
-- src/ejecutor_riesgo.py: ejecutor principal en modo Dry Run.
+- `src/ejecutor_riesgo.py` opera en Dry Run por defecto y admite una prueba explícita en Paper.
+- `src/ordenes_paper.py` envía y concilia órdenes Paper.
 - src/config_riesgo.py: parámetros de riesgo.
 - src/calculo_riesgo.py: cálculo de exposición y riesgo monetario.
 - src/seguridad_ibkr.py: validación de conexión y cuenta autorizada.
@@ -525,28 +530,13 @@ Registros observados:
 
 #### Limitaciones y pendientes técnicos
 
-- Kafka no estuvo disponible en localhost:9092 durante estas pruebas.
-- Falta comprobar el consumo integrado de señales.
-- La posición SQLite es lógica y no representa necesariamente
-  una posición existente en IBKR.
-- Falta sincronizar posiciones, cantidades y órdenes del broker.
-- Falta verificar la recuperación ante errores de persistencia
-  y confirmación de offsets Kafka.
-- Falta comprobar el cierre de recursos ante todas las excepciones.
-- La detección de desconexión no garantiza detectar inmediatamente
-  todas las interrupciones silenciosas de red.
-- No se han habilitado permisos de escritura ni enviado órdenes.
+- La detección de desconexión puede tardar ante interrupciones silenciosas.
+- En las pruebas aisladas, un fallo de SQLite conserva la señal pendiente para releerla. Falta repetir ese escenario con Kafka conectado.
+- Las órdenes con resultado incierto quedan pendientes de conciliación y bloquean el reenvío. Para reanudar, se verifica la referencia y la ejecución en TWS.
 
 #### Punto de continuación para el siguiente integrante
 
-Retomar el paso 18.9: consulta y sincronización de posiciones
-y órdenes existentes en IBKR, manteniendo la API en solo lectura.
-
-El objetivo es contrastar el estado lógico del ejecutor con
-el estado informado por el broker antes de autorizar operaciones.
-
-No avanzar al paso 19.7 hasta completar y validar los controles
-de riesgo y las pruebas integradas del ejecutor.
+Reproducir el paso 20 ante interrupciones de TWS, Kafka y Spark. Usar la corrida integral aprobada como referencia.
 
 ---
 
@@ -554,11 +544,7 @@ de riesgo y las pruebas integradas del ejecutor.
 
 **Carácter:** Obligatorio.
 
-**Estado:** Parcialmente completado.
-
-El bloqueo inicial de acceso a la API fue superado el 24/11/2026.
-
-No se considera completado el paso 19 porque todavía falta verificar la publicación de cotizaciones en Kafka y la ejecución controlada de órdenes paper.
+**Estado:** Componentes de IBKR verificados. El 27/11 se comprobó la publicación de cotizaciones en Kafka y la ejecución automática de una secuencia controlada BUY/SELL en Paper. El flujo conjunto también se verificó en el paso 20.
 
 #### Paso 19.1 — Instalación y configuración de TWS
 
@@ -618,7 +604,7 @@ No se verificó la recepción de todos los ticks individuales ni la estabilidad 
 
 #### Paso 19.5 — Productor IBKR
 
-**Estado:** Implementado; validación funcional pendiente.
+**Estado:** Productor ejecutado con cotizaciones de IBKR y entrega confirmada por Kafka.
 
 **Archivo:**
 
@@ -659,7 +645,7 @@ Validación sintáctica aprobada.
 
 #### Paso 19.6 — Publicación de cotizaciones en Kafka
 
-**Estado:** Pendiente.
+**Estado:** Verificada en `ticks_ibkr_prueba` con cotizaciones EURUSD de IBKR.
 
 **Acción:**
 
@@ -677,7 +663,7 @@ También debe considerarse la existencia de mensajes ficticios almacenados anter
 
 #### Paso 19.7 — Integración de órdenes Paper Trading
 
-**Estado:** Pendiente.
+**Estado:** Aprobado con señales controladas. El ciclo automático ejecutó BUY y SELL de 914 EUR y terminó con 0 EUR en TWS y posición cerrada en SQLite.
 
 **Dependencia:**
 
@@ -705,7 +691,7 @@ El paso completo termina cuando:
 
 **Carácter:** Obligatorio.
 
-**Estado:** Pruebas parciales realizadas; validación integral pendiente.
+**Estado:** Bloque B, tramos de mercado y ciclo Paper controlado verificados. La corrida conjunta `50c598d3dc` ejecutó BUY y SELL de 914 EUR generados por SMA 3/5 y terminó con 0 EUR en TWS y posición cerrada en SQLite. Queda pendiente la recuperación ante interrupciones.
 
 **Qué debemos hacer:**
 
@@ -868,7 +854,7 @@ La exposición final deberá distinguir entre funcionalidades implementadas, pru
 | Utilizar SQLite | Conservar posiciones lógicas y señales aceptadas |
 | Separar parámetros de riesgo | Centralizar configuración en config_riesgo.py |
 | Autorizar una cuenta Paper mediante .env | Restringir el acceso a la cuenta configurada localmente |
-| Mantener el ejecutor en Dry Run | Validar controles sin enviar órdenes |
+| Arrancar el ejecutor en Dry Run por defecto | Paper requiere activación explícita y un tópico autorizado |
 | Bloquear ante pérdida de conexión | Evitar procesamiento sin una conexión autorizada |
 
 ### 6.2. Decisiones pendientes
@@ -882,10 +868,10 @@ La exposición final deberá distinguir entre funcionalidades implementadas, pru
 | num_ticks | Revisar efecto del filtrado de cotizaciones idénticas |
 | Comparación de medias o cruce exacto | Mantener lógica original hasta acuerdo del equipo |
 | Interpretación de SELL | Confirmar cierre de compra, sin apertura de corto |
-| Estado de posiciones | Persistencia lógica SQLite implementada; sincronización con IBKR pendiente en 18.9 |
-| Riesgo por operación | Definido para Dry Run: exposición máxima de 1000 USD y riesgo teórico de 20 USD; pendiente validación con IBKR |
+| Estado de posiciones | SQLite conserva el estado por corrida. Paper se concilia con ejecuciones y efectivo EUR de la cuenta. |
+| Riesgo por operación | Exposición nominal máxima de 1000 USD y riesgo teórico de 20 USD aplicados en la prueba Paper. |
 | Stop Loss y Take Profit | Revisar parámetros para FOREX sin modificar unilateralmente |
-| Datos sintéticos y de mercado | Definir mecanismos de aislamiento |
+| Datos sintéticos y de mercado | Tópicos separados y checkpoints por tópico de velas. Las corridas Paper tienen grupo y SQLite propios. |
 | Red Docker | Revisar configuración definitiva |
 | Computadora ejecutora | Definir entorno de integración completa |
 | Dependencias Python | Cinco versiones directas verificadas en segundo entorno; compatibilidad general pendiente |
@@ -895,25 +881,10 @@ La exposición final deberá distinguir entre funcionalidades implementadas, pru
 
 ---
 
-## 7. Orden propuesto de integración
+## 7. Orden de integración vigente
 
-El orden de ejecución puede diferir de la numeración histórica de las actividades.
-
-Se propone:
-
-1. Verificar la publicación de cotizaciones IBKR en Kafka.
-2. Desarrollar y validar la construcción de velas OHLC.
-3. Conectar las velas con la estrategia SMA.
-4. Verificar las señales publicadas en Kafka.
-5. Desarrollar el ejecutor en modalidad de registro sin órdenes.
-6. Validar los controles de riesgo.
-7. Realizar pruebas controladas de órdenes Paper Trading.
-8. Ejecutar pruebas integradas y de resistencia a fallos.
-9. Consolidar evidencias y documentación final.
-
-La construcción de velas OHLC también puede desarrollarse de forma independiente utilizando datos ficticios mientras se prepara el entorno de integración IBKR-Kafka.
-
-El orden definitivo deberá coordinarse con el equipo.
+1. Comprobar recuperación ante reinicios y desconexiones de TWS, Kafka y Spark.
+2. Repetir el procedimiento en el equipo de otro integrante y consolidar las evidencias para la exposición.
 
 ---
 
@@ -1067,16 +1038,17 @@ Los enlaces internos del README y del mapa de trabajo se ajustan a las rutas exi
 
 El proyecto podrá considerarse funcionalmente integrado cuando:
 
-- [ ] IBKR proporciona cotizaciones al productor.
-- [ ] El productor publica cotizaciones válidas en ticks.
-- [ ] Spark genera velas OHLC de un minuto.
-- [ ] Las velas terminadas se publican en velas.
-- [ ] La estrategia consume las velas.
-- [ ] Las señales se publican en signals.
-- [ ] El ejecutor valida los controles de riesgo.
-- [ ] Las órdenes autorizadas se realizan exclusivamente en Paper Trading.
-- [ ] Se comprueba el estado de las órdenes.
-- [ ] Se validan los principales escenarios de error.
+- [x] IBKR proporciona cotizaciones al productor.
+- [x] El productor publica cotizaciones válidas en el tópico Kafka de ticks de prueba.
+- [x] Spark genera velas OHLC de un minuto.
+- [x] Las velas terminadas se publican en el tópico Kafka de velas de prueba.
+- [x] La estrategia consume las velas.
+- [x] Las señales se publican en tópicos Kafka de prueba.
+- [x] El ejecutor valida los controles de riesgo.
+- [x] Las órdenes autorizadas se realizan exclusivamente en Paper Trading.
+- [x] Se comprueba el estado de las órdenes.
+- [x] Un BUY y un SELL nacidos de cotizaciones de mercado se ejecutan dentro de una misma corrida Paper.
+- [ ] Se valida la recuperación ante interrupciones de los servicios.
 - [ ] Otro integrante reproduce el procedimiento.
 - [ ] La documentación y las evidencias están actualizadas.
 
@@ -1092,6 +1064,7 @@ La existencia de código fuente no equivale automáticamente al cumplimiento de 
 | 1.1 | 24/11/2026 | Incorporación de avances SMA, backtesting, conexión IBKR, productor preliminar y actualización de pendientes |
 | 1.2 | 26/11/2026 | Consolidación del ejecutor, cálculo de riesgo monetario, seguridad IBKR Paper, pruebas locales y actualización de pendientes |
 | 1.3 | 26/11/2026 | Segundo entorno Docker, corrección IPv4 validada, inicio OHLC y montaje de checkpoints; salida OHLC pendiente |
+| 1.4 | 27/11/2026 | Bloque B, señales de mercado y ciclo controlado Paper verificados. Actualización del paso 20. |
 
 ---
 
@@ -1103,3 +1076,8 @@ La existencia de código fuente no equivale automáticamente al cumplimiento de 
 ### Cierre de sesión 26/11/2026 (versión 1.3)
 
 Retomar paso 15: comprobar generación y publicación de velas con datos controlados, avance del watermark y recuperación del checkpoint. En paralelo se mantiene el pendiente 18.9 del ejecutor. Antes de integrar IBKR, aislar datos ficticios y verificar individualmente la conectividad de los demás clientes Kafka. Commit y push de este corte pendientes de confirmación en Git.
+
+
+### Cierre documental del 27/11/2026
+
+Los pasos 18.9 a 19.7 cuentan con evidencia funcional. La corrida integral del paso 20 quedó cerrada. El pendiente principal es reproducir el flujo ante fallos. Consulta la [bitácora de validación](BITACORA_VALIDACION_2026-11-27.md).

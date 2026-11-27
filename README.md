@@ -4,10 +4,10 @@
 **Proyecto escolar | Licenciatura en Inteligencia Artificial y Ciencia de Datos**
 
 **Equipo:** 6 estudiantes
-**Corte documentado:** 26 de noviembre de 2026
-**Estado:** Integración de componentes y ejecutor Dry Run implementados parcialmente. Continuar en el paso 18.9 del mapa de trabajo.
+**Corte documentado:** 27 de noviembre de 2026
+**Estado:** Bloque B aprobado y ciclo automático con señales controladas validado en TWS Paper. El ciclo integral con cotizaciones de mercado y órdenes Paper también quedó verificado. Restan las pruebas de recuperación del paso 20.
 
-> **Aviso:** Este proyecto tiene fines exclusivamente educativos. Se ha verificado la recepción de cotizaciones de EURUSD mediante Interactive Brokers en una sesión Paper Trading. No se han enviado órdenes. Todas las operaciones futuras deberán realizarse exclusivamente en una cuenta simulada, nunca con dinero real.
+> **Aviso:** Este proyecto tiene fines exclusivamente educativos. El proyecto recibe cotizaciones de EURUSD y ejecuta órdenes exclusivamente en la cuenta Paper autorizada.
 
 ## 1. ¿Qué queremos construir?
 
@@ -159,20 +159,18 @@ Consultar:
 
 [Integración de la API de Interactive Brokers](docs/INTEGRACION_API_IBKR.md)
 
-### 3.4. Estado de la integración completa
+La tabla anterior corresponde al corte del 24 de noviembre. Los avances posteriores se registran en la sección siguiente.
 
-| Actividad | Estado |
+### 3.4. Estado de la integración al 27 de noviembre de 2026
+
+| Actividad | Resultado |
 |---|---|
-| Conversión de ticks a velas OHLC de un minuto | Implementada; validación integral pendiente |
-| Publicación de velas terminadas en Kafka | Implementada; validación integral pendiente |
-| Integración de productor IBKR con Kafka | Pendiente de prueba |
-| Integración Spark con estrategia SMA | Tópicos compatibles; validación integral pendiente |
-| Publicación integrada de señales BUY/SELL | Pendiente de validación |
-| Ejecutor con controles de riesgo | Dry Run implementado; seguridad local verificada |
-| Pruebas de extremo a extremo | Pruebas parciales realizadas; validación completa pendiente |
-| Documentación final y exposición | En progreso |
+| Bloque B con ticks controlados | Aprobado en `signals_prueba`. Kafka registró un BUY y un SELL de EURUSD en orden, con precios esperados y sin duplicados. El ejecutor aceptó ambas señales en Dry Run. |
+| Cotizaciones de IBKR, Kafka, Spark y SMA 3/5 | Verificados en tópicos de prueba. TWS confirmó datos de tipo 1 y la estrategia publicó BUY y SELL a partir de velas de mercado. |
+| Ejecutor y órdenes Paper | Un BUY y un SELL controlados de 914 EUR se ejecutaron y conciliaron automáticamente. TWS terminó con 0 EUR y SQLite con la posición cerrada. |
+| Cotización de mercado hasta ejecución Paper en una corrida | Aprobada. SMA generó un BUY y un SELL de 914 EUR a partir de cotizaciones de mercado. TWS terminó con 0 EUR y SQLite con la posición cerrada. |
 
-No debe confundirse el funcionamiento individual de un componente con la validación del sistema completo.
+Los precios, la evidencia de cada prueba y el criterio de cierre se encuentran en la [bitácora de validación del 27 de noviembre](docs/docs/BITACORA_VALIDACION_2026-11-27.md).
 
 ---
 
@@ -326,7 +324,7 @@ Instalar TWS fuera del repositorio del proyecto.
 | Puerto | 7497 |
 | Cliente API | ib_async |
 | Versión | 2.1.0 |
-| API solo lectura | Activada |
+| Permisos de API | Solo lectura para cotizaciones y Dry Run. Habilitar órdenes únicamente durante una prueba explícita en TWS Paper. |
 | Conexiones | Solo localhost |
 | Instrumento | EURUSD |
 
@@ -503,12 +501,12 @@ Consultar la [guía de estrategia y backtesting](docs/docs/GUIA_ESTRATEGIA_Y_BAC
 
 | Paso | Actividad | Estado |
 |---|---|---|
-| 15 | Construir velas OHLC mediante Spark | Implementado; validación integral pendiente |
-| 16 | Generar datos de prueba reproducibles | Generador de velas implementado; validación OHLC pendiente |
+| 15 | Construir velas OHLC mediante Spark | Validado con ticks controlados y cotizaciones de IBKR |
+| 16 | Generar datos de prueba reproducibles | Generador de ticks usado en el Bloque B aprobado |
 | 17 | Implementar estrategia SMA 10/50 | Implementada; conexión por tópicos principales |
-| 18 | Desarrollar ejecutor y gestión de riesgo | Parcialmente completado; continuar en 18.9 |
-| 19 | Integrar Interactive Brokers | Conexión API verificada; publicación Kafka y órdenes paper pendientes |
-| 20 | Realizar pruebas integradas y resistencia a fallos | Pruebas parciales realizadas |
+| 18 | Desarrollar ejecutor y gestión de riesgo | Controles comprobados y Bloque B aprobado en Dry Run |
+| 19 | Integrar Interactive Brokers | Cotizaciones en tiempo real y ciclo controlado de órdenes Paper verificados |
+| 20 | Realizar pruebas integradas y resistencia a fallos | Flujo integral aprobado. Pruebas de recuperación pendientes. |
 | 21 | Desarrollar backtesting | Implementado y documentado |
 | 22 | Documentación y exposición final | En progreso |
 
@@ -516,17 +514,11 @@ Se conserva la numeración del mapa de trabajo original.
 
 ### Prioridades técnicas vigentes
 
-1. Paso 18.9: consultar y sincronizar posiciones y órdenes de IBKR.
-2. Paso 18.10: completar los controles de riesgo pendientes.
-3. Paso 18.11: validar el ejecutor Dry Run con Kafka.
-4. Paso 19: completar las pruebas funcionales de integración IBKR.
-5. Paso 19.7: probar órdenes exclusivamente Paper, previa validación de los controles.
-6. Paso 20: validar el recorrido completo y la resistencia a fallos.
-7. Paso 22: finalizar documentación y exposición.
+1. Reproducir por separado la recuperación de Kafka, Spark y TWS ante interrupciones.
+2. Repetir el procedimiento en el equipo de otro integrante.
+3. Consolidar el informe y la exposición del paso 22.
 
-El plan detallado y los criterios de aceptación se encuentran en:
-
-[MAPA_DE_TRABAJO.md](docs/docs/MAPA_DE_TRABAJO.md)
+Consulta el [mapa de trabajo](docs/docs/MAPA_DE_TRABAJO.md) para los criterios de aceptación.
 
 ---
 
@@ -605,16 +597,14 @@ Se conserva la dinámica de ejecución compartida y revisión colectiva, complem
 | 21/11/2026 | Infraestructura Kafka y Spark, productor ficticio y lectura de once mensajes. |
 | Incorporado al repositorio antes del corte del 24/11/2026 | Estrategia SMA, pruebas automatizadas y backtesting desarrollados por Laura M. Sánchez Martínez. |
 | 24/11/2026 | Instalación y configuración de TWS, conexión API, recepción de cotizaciones EURUSD y desarrollo preliminar del productor IBKR. |
-
 | 26/11/2026 | Consolidación del ejecutor Dry Run, cálculo de riesgo monetario, persistencia SQLite, autorización de cuenta Paper, pruebas locales de seguridad y actualización documental. |
+
+| 27/11/2026 | Bloque B aprobado, cotizaciones de IBKR hasta la estrategia verificadas y validación del ciclo integral de mercado a TWS Paper. |
 
 ### Punto de entrega
 
-- Continuar en el paso 18.9 del mapa de trabajo.
-- Configurar localmente IBKR_PAPER_ACCOUNT en el archivo .env.
-- Mantener TWS en Paper Trading y la API en solo lectura.
-- No compartir el archivo .env ni la base de datos SQLite.
-- Kafka no estuvo disponible durante las pruebas locales de seguridad.
-- No se han enviado órdenes a IBKR.
+- Continuar con las pruebas de resistencia a fallos del paso 20.
+- Configurar `IBKR_PAPER_ACCOUNT` en el archivo privado `.env` y conservar las bases de pruebas fuera de los cambios a publicar.
+- Consultar el [guion de integración](docs/docs/GUION_SESION_INTEGRACION.md) para reproducir el ciclo Paper aislado.
 
 **Principio del proyecto:** comprender, implementar, comprobar y documentar antes de declarar terminado un componente.
