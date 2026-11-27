@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-from generar_ticks_controlados import construir_ticks  # noqa: E402
+from generar_ticks_controlados import construir_ticks, construir_tendencia, senales_esperadas  # noqa: E402
 from validar_velas import comparar  # noqa: E402
 
 BASE = datetime(2026, 11, 27, 15, 0, tzinfo=timezone.utc)
@@ -59,6 +59,26 @@ class PruebasTicksControlados(unittest.TestCase):
         aprobado, filas = comparar(self.esperadas, malas)
         self.assertFalse(aprobado)
         self.assertEqual([f[1] for f in filas], ["FALLA", "FALLA", "FALTA"])
+
+
+class PruebasModoTiempoReal(unittest.TestCase):
+
+    def setUp(self):
+        self.ticks, self.esperadas = construir_tendencia(BASE, 10)
+
+    def test_diez_velas_y_seis_ticks_por_minuto(self):
+        self.assertEqual(len(self.esperadas), 10)
+        self.assertTrue(all(e["num_ticks"] == 6 for e in self.esperadas))
+
+    def test_velas_coinciden_con_simulacion_de_spark(self):
+        for e in self.esperadas:
+            simulada = vela_desde_ticks(self.ticks, e["inicio"])
+            for campo in ("open", "high", "low", "close", "num_ticks"):
+                self.assertAlmostEqual(simulada[campo], e[campo], places=9)
+
+    def test_estrategia_3_5_da_un_buy_y_luego_un_sell(self):
+        senales = senales_esperadas(self.esperadas)
+        self.assertEqual([s[0] for s in senales], ["BUY", "SELL"])
 
 
 if __name__ == "__main__":
