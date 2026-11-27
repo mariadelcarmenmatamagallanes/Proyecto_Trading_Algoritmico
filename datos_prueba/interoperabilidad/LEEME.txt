@@ -1,0 +1,11 @@
+Ejemplos de interoperabilidad de EURUSD
+
+Cada archivo JSONL contiene un objeto JSON por línea. El nombre del archivo corresponde al tópico Kafka. Son datos controlados con timestamps UTC, sin información de cuenta.
+
+- ticks.jsonl contiene 60 ticks de diez minutos y un tick posterior para permitir que Spark cierre la última vela.
+- velas.jsonl contiene las diez velas esperadas con precio medio entre bid y ask.
+- signals.jsonl contiene el BUY y el SELL esperados con SMA 3/5 en la variante de demostración.
+
+Pedir al otro equipo registros tal como los publica en Kafka. Para probar BUY y SELL con esta SMA, usar una serie de velas que produzca ambas señales. Un único registro sirve para revisar los campos.
+
+Para la prueba con el ejecutor en Dry Run, generar timestamps vigentes y conservar los cinco campos del contrato. El ejecutor rechaza señales con más de 120 segundos. Ejecutar las pruebas de intercambio en un broker aislado con los nombres ticks, velas y signals.
